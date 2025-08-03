@@ -1,12 +1,22 @@
 import os
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from openai import OpenAI
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 class JobRequest(BaseModel):
     job_title: str
@@ -60,3 +70,8 @@ Respond ONLY in valid JSON format. No preamble or explanations.
         return JSONResponse(content={"result": response.choices[0].message.content})
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": str(e)})
+
+# Add a health check endpoint
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "Job Description Generator API is running"}
