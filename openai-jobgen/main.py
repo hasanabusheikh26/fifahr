@@ -1,43 +1,62 @@
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import openai
 import os
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from openai import OpenAI
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 app = FastAPI()
 
-class JobInput(BaseModel):
+class JobRequest(BaseModel):
     job_title: str
-    company_type: str
-    location: str
+    company_name: str = ""
+    seniority: str = ""
+    department: str = ""
+    location: str = ""
+    domain: str = ""
 
-@app.post("/generate-description/")
-async def generate_description(input: JobInput):
+@app.post("/generate-description")
+async def generate_description(data: JobRequest):
+    prompt = f"""
+You are an expert hiring assistant.
+
+Given the following job context:
+
+- Title: {data.job_title}
+- Company: {data.company_name}
+- Seniority: {data.seniority}
+- Department: {data.department}
+- Location: {data.location}
+- Domain: {data.domain}
+
+Generate the following output as a structured JSON:
+
+{{
+  "job_title": string,
+  "enhanced_description": string,
+  "skill_categories": {{
+    "job_related_skills": [string],
+    "general_expertise": [string],
+    "soft_skills": [string]
+  }},
+  "key_responsibilities": [string]
+}}
+
+Respond ONLY in valid JSON format. No preamble or explanations.
+"""
+
     try:
-        prompt = f"""
-You are an expert HR job card generator that creates high-precision job listings for hiring managers.
-
-Your task is to break down the following job title into a comprehensive, execution-focused AI profile card.
-
-Structure:
-1. **Enhanced Job Description**
-2. **Job-Related (Technical/Domain) Skills**
-3. **General Role Skills**
-4. **Soft Skills**
-5. **Key Responsibilities**
-6. **Rating Breakdown** (5 key metrics + definitions for evaluation)
-
-Job Title: {input.job_title}  
-Company Type: {input.company_type}  
-Location: {input.location}
-        """
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=1200
+            messages=[
+                {"role": "system", "content": "You are an expert hiring assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.6,
+            max_tokens=1000
         )
-        return { "output": response.choices[0].message["content"] }
+
+        return JSONResponse(content={"result": response.choices[0].message.content})
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        return JSONResponse(status_code=500, content={"error": str(e)})
